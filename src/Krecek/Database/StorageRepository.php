@@ -22,7 +22,7 @@ abstract class StorageRepository extends Object
     private $annotationReader;
 
     /**
-     * BaseRepository constructor.
+     * StorageRepository constructor.
      * @param IDatabaseLink $databaseLink
      * @param Container $container
      */
@@ -79,9 +79,9 @@ abstract class StorageRepository extends Object
 
     /**
      * @internal
-     * @param BaseEntity $entity
+     * @param StoredEntity $entity
      */
-    private function injectIntoEntity(BaseEntity $entity)
+    private function injectIntoEntity(StoredEntity $entity)
     {
         $entity->injectDependencies($this->annotationReader, $this->databaseLink);
     }
@@ -90,13 +90,13 @@ abstract class StorageRepository extends Object
 
     /**
      * Creates new entity
-     * @return BaseEntity
+     * @return StoredEntity
      */
     public function create()
     {
         $class = $this->getEntityClass();
 
-        /** @var $entity BaseEntity */
+        /** @var $entity StoredEntity */
         $entity = new $class();
         $this->injectIntoEntity($entity);
         return $entity;
@@ -105,14 +105,14 @@ abstract class StorageRepository extends Object
     /**
      * Loads entity from storage
      * @param mixed $key
-     * @return BaseEntity
+     * @return StoredEntity
      */
     public function get($key)
     {
         $class = $this->getEntityClass();
         $row = $this->getDBTable()->get($key);
 
-        /** @var $entity BaseEntity */
+        /** @var $entity StoredEntity */
         $entity = new $class();
         $this->injectIntoEntity($entity);
         $entity->setRecord($row);
@@ -122,7 +122,7 @@ abstract class StorageRepository extends Object
     /**
      * Loads entity from database or creates new if record does not exist
      * @param mixed $key
-     * @return BaseEntity
+     * @return StoredEntity
      */
     public function getOrCreate($key)
     {
