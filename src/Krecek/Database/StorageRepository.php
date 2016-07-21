@@ -10,10 +10,10 @@ use Nette\Object;
 use ReflectionClass;
 
 /**
- * Class BaseRepository
+ * Class StorageRepository
  * @package Krecek\Database
  */
-abstract class BaseRepository extends Object
+abstract class StorageRepository extends Object
 {
     /** @var IDatabaseLink */
     private $databaseLink;

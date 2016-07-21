@@ -16,10 +16,10 @@ use ReflectionObject;
 use ReflectionProperty;
 
 /**
- * Class BaseEntity
+ * Class StoredEntity
  * @package Krecek\Database
  */
-abstract class BaseEntity extends Object
+abstract class StoredEntity extends Object
 {
     /** @var ActiveRow|NULL */
     private $row = null;
