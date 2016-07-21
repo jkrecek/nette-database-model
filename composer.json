@@ -1,0 +1,20 @@
+{
+	"name": "jkrecek/nette-database-model",
+	"type": "library",
+	"description": "Database Entity-Repository based model.",
+	"keywords": ["annotations", "entity", "repository", "database"],
+	"homepage": "http://github.com/jkrecek/nette-database-model",
+	"authors": [
+		{"name": "Honza Krecek", "email": "jan.krecek01@gmail.com"}
+	],
+	"require": {
+		"php": ">=5.3.7",
+		"kdyby/annotations": "^2.3",
+		"nette/database": "^2.4"
+	},
+	"autoload": {
+		"psr-0": {
+			"Krecek\\Database\\": "src/"
+		}
+	}
+}
