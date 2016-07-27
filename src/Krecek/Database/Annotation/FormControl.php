@@ -2,12 +2,13 @@
 namespace Krecek\Database\Annotation;
 
 /**
- * Method called when creating new record.
+ * Annotation for form name.
  *
  * @Annotation
  * @Target({"PROPERTY"})
  */
-class OnCreate extends MethodCall
+class FormControl
 {
-
+    /** @var string */
+    public $controlName;
 }

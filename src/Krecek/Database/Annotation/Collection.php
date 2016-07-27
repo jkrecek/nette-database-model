@@ -2,12 +2,12 @@
 namespace Krecek\Database\Annotation;
 
 /**
- * Annotation linking Entity to StorageRepository.
+ * Annotation linking Collection to StorageRepository.
  *
  * @Annotation
  * @Target({"CLASS"})
  */
-class Entity
+class Collection
 {
     /** @var string */
     public $className;

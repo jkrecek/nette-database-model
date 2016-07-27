@@ -1,13 +1,14 @@
 <?php
+
 namespace Krecek\Database\Annotation;
 
 /**
- * Method called when creating new record.
+ * Annotation representing referencing class.
  *
  * @Annotation
  * @Target({"PROPERTY"})
  */
-class OnCreate extends MethodCall
+class Reference
 {
-
+    public $className;
 }

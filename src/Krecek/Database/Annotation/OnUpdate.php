@@ -7,8 +7,7 @@ namespace Krecek\Database\Annotation;
  * @Annotation
  * @Target({"PROPERTY"})
  */
-class OnUpdate
+class OnUpdate extends MethodCall
 {
-    /** @var string */
-    public $methodName;
+
 }

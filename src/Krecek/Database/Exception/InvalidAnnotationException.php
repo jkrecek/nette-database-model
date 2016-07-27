@@ -17,7 +17,7 @@ class InvalidAnnotationException extends Exception
     public static function assert($annotation, $className)
     {
         if ($annotation === null) {
-            throw new self("Invalid annotation: Annotation is null.");
+            throw new self("Invalid annotation: Annotation is null, should be instance of {$className}.");
         }
         if (!($annotation instanceof $className)) {
             throw new self("Invalid annotation: Annotation is not instance of {$className}.");

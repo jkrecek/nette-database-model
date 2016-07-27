@@ -2,7 +2,8 @@
 namespace Krecek\Database;
 
 use Doctrine\Common\Annotations\CachedReader;
-use Krecek\Database\Annotation\Entity;
+use Doctrine\Common\Annotations\Reader;
+use Krecek\Database\Annotation\Collection;
 use Krecek\Database\Exception\InvalidAnnotationException;
 use Nette\Database\Table\Selection;
 use Nette\DI\Container;
@@ -13,7 +14,7 @@ use ReflectionClass;
  * Class StorageRepository
  * @package Krecek\Database
  */
-abstract class StorageRepository extends Object
+abstract class StorageRepository extends Object implements IDependencyProvider
 {
     /** @var IDatabaseLink */
     private $databaseLink;
@@ -32,105 +33,165 @@ abstract class StorageRepository extends Object
         $this->annotationReader = $container->getService('annotations.reader');
     }
 
-    /************** internal methods **************/
+    /************** private methods **************/
 
-    /**
-     * @internal
-     * @return string
-     */
-    private function getEntityClass()
-    {
-        return $this->getEntityClassEntityAnnotation()->className;
-    }
-
-    /**
-     * @internal
-     * @return Entity
-     * @throws InvalidAnnotationException
-     */
-    private function getEntityClassEntityAnnotation()
-    {
-        $reflect = new ReflectionClass($this);
-        $annotation = $this->annotationReader->getClassAnnotation($reflect, Entity::class);
-        InvalidAnnotationException::assert($annotation, Entity::class);
-        return $annotation;
-    }
 
     /**
      * @internal
      * @return Selection
      */
-    protected function getDBTable()
+    protected function getTable()
     {
-        $table = $this->getEntityTable();
+        $table = $this->getTableName();
         return $this->databaseLink->getTable($table);
+    }
+
+    /************** interface IStorageDependencyProvider **************/
+
+    /**
+     * @internal
+     * @return Reader
+     */
+    function provideAnnotationReader()
+    {
+        return $this->annotationReader;
+    }
+
+    /**
+     * @internal
+     * @return IDatabaseLink
+     */
+    function provideDatabaseLink()
+    {
+        return $this->databaseLink;
+    }
+
+
+    /************** annotation methods **************/
+
+    /**
+     * @internal
+     * @param Reader $annotationReader
+     * @return string
+     * @throws InvalidAnnotationException
+     */
+    static function getCollectionClassName(Reader $annotationReader)
+    {
+        $reflect = new ReflectionClass(get_called_class());
+        $annotation = $annotationReader->getClassAnnotation($reflect, Collection::class);
+        InvalidAnnotationException::assert($annotation, Collection::class);
+        return $annotation->className;
     }
 
     /**
      * @internal
      * @return string
+     * @throws InvalidAnnotationException
      */
-    private function getEntityTable()
+    function getInstanceCollectionClassName()
     {
-        $entityAnnotation = $this->getEntityClassEntityAnnotation();
-        $tableName = $entityAnnotation->getTable($this->annotationReader);
-        return $tableName;
+        return static::getCollectionClassName($this->annotationReader);
     }
 
     /**
      * @internal
-     * @param StoredEntity $entity
+     * @return string
+     * @throws InvalidAnnotationException
      */
-    private function injectIntoEntity(StoredEntity $entity)
+    function getEntityClassName()
     {
-        $entity->injectDependencies($this->annotationReader, $this->databaseLink);
+        $collectionClassName = $this->getInstanceCollectionClassName();
+        return $collectionClassName::getEntityClassName($this->annotationReader);
+    }
+
+    /**
+     * @internal
+     * @return string
+     * @throws InvalidAnnotationException
+     */
+    function getTableName()
+    {
+        $entityClassName = $this->getEntityClassName();
+        return $entityClassName::getTableName($this->annotationReader);
     }
 
     /************** public methods **************/
 
     /**
-     * Creates new entity
+     * Creates new entity.
      * @return StoredEntity
      */
     public function create()
     {
-        $class = $this->getEntityClass();
-
-        /** @var $entity StoredEntity */
-        $entity = new $class();
-        $this->injectIntoEntity($entity);
-        return $entity;
+        $entityClassName = $this->getEntityClassName();
+        return $entityClassName::create($this, null);
     }
 
     /**
-     * Loads entity from storage
+     * Creates collection for entire repository.
+     * @return StoredCollection
+     */
+    public function listAll()
+    {
+        $collectionClassName = $this->getInstanceCollectionClassName();
+        return $collectionClassName::create($this, $this->getTable());
+    }
+
+    /**
+     * Loads entity from storage.
      * @param mixed $key
-     * @return StoredEntity
+     * @return StoredEntity|null
      */
     public function get($key)
     {
-        $class = $this->getEntityClass();
-        $row = $this->getDBTable()->get($key);
+        if ($key == null) {
+            return null;
+        }
 
-        /** @var $entity StoredEntity */
-        $entity = new $class();
-        $this->injectIntoEntity($entity);
-        $entity->setRecord($row);
-        return $entity;
+        $row = $this->getTable()->get($key);
+        if ($row == null) {
+            return null;
+        }
+
+        $entityClassName = $this->getEntityClassName();
+        return $entityClassName::create($this, $row);
+
     }
 
     /**
-     * Loads entity from database or creates new if record does not exist
-     * @param mixed $key
-     * @return StoredEntity
+     * Loads entity matching $condition.
+     * @param array $condition
+     * @return StoredEntity|null
      */
-    public function getOrCreate($key)
+    public function findOne(array $condition)
     {
-        $entity = $this->get($key);
-        if ($entity == null) {
-            $entity = $this->create();
+        $row = $this->getTable()->where($condition)->fetch();
+        if ($row == null) {
+            return null;
         }
 
-        return $entity;
+        $entityClassName = $this->getEntityClassName();
+        return $entityClassName::create($this, $row);
+    }
+
+    /**
+     * Loads collection from database matching $condition.
+     * @param array $condition
+     * @return StoredCollection
+     */
+    public function findMany(array $condition)
+    {
+        $selection = $this->getTable()->where($condition);
+        $collectionClassName = $this->getInstanceCollectionClassName();
+        return $collectionClassName::create($this, $selection);
+    }
+
+    /**
+     * Deletes row by its primary value.
+     * @param $key
+     */
+    public function delete($key)
+    {
+        $this->getTable()->wherePrimary($key)->delete();
     }
 }

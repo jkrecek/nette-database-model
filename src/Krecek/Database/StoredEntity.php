@@ -1,17 +1,27 @@
 <?php
 namespace Krecek\Database;
 
-use Doctrine\Common\Annotations\CachedReader;
+use ArrayAccess;
+use Doctrine\Common\Annotations\Reader;
 use Exception;
 use Krecek\Database\Annotation\Column;
+use Krecek\Database\Annotation\Exported;
+use Krecek\Database\Annotation\FormControl;
+use Krecek\Database\Annotation\MethodCall;
 use Krecek\Database\Annotation\OnCreate;
 use Krecek\Database\Annotation\OnUpdate;
+use Krecek\Database\Annotation\Primary;
+use Krecek\Database\Annotation\Reference;
 use Krecek\Database\Annotation\Table;
+use Krecek\Database\Exception\IncompleteEntityException;
 use Krecek\Database\Exception\InvalidAnnotationException;
+use Krecek\Database\Exception\NoReferenceException;
 use Nette\Database\Table\ActiveRow;
-use Nette\Object;
+use Nette\Database\Table\Selection;
+use Nette\Forms\Controls\ChoiceControl;
+use Nette\Forms\Form;
+use Nette\Utils\ArrayHash;
 use ReflectionClass;
-use ReflectionMethod;
 use ReflectionObject;
 use ReflectionProperty;
 
@@ -19,19 +29,24 @@ use ReflectionProperty;
  * Class StoredEntity
  * @package Krecek\Database
  */
-abstract class StoredEntity extends Object
+abstract class StoredEntity extends StoredObject
 {
     /** @var ActiveRow|NULL */
-    private $row = null;
+    protected $row = null;
 
-    /** @var CachedReader */
-    private $annotationReader;
-
-    /** @var IDatabaseLink */
-    private $databaseLink;
-
+    /** @var ArrayHash */
+    private $cachedReferences;
 
     /************** internal methods **************/
+
+    /**
+     * Sets ActiveRow record for the entity.
+     * @param ActiveRow $row
+     */
+    private function setRecord(ActiveRow $row)
+    {
+        $this->loadFromRecord($row);
+    }
 
     /**
      * @internal
@@ -42,39 +57,14 @@ abstract class StoredEntity extends Object
     {
         $this->row = $row;
 
-        $reflectObject = new ReflectionObject($this);
-
-        foreach ($reflectObject->getProperties() as $property) {
-            $columnName = $this->getColumnNameForProperty($property);
-
-            if (isset($row->$columnName)) {
+        foreach ($row as $columnName => $value) {
+            $property = $this->getPropertyByColumnName($columnName);
+            if ($property) {
                 $property->setAccessible(true);
-                $property->setValue($this, $row->$columnName);
+                $property->setValue($this, $value);
             }
+
         }
-
-        $primaryProperty = $this->getPrimaryColumn();
-        if (!$primaryProperty) {
-            throw new Exception(); // TODO
-        }
-
-        $primaryProperty->setValue($this, $row->getPrimary());
-    }
-
-    /**
-     * @internal
-     * @param ReflectionProperty $reflectionProperty
-     * @return string
-     */
-    private function getColumnNameForProperty(ReflectionProperty $reflectionProperty)
-    {
-        $columnName = $reflectionProperty->getName();
-        $annotation = $this->annotationReader->getPropertyAnnotation($reflectionProperty, Column::class);
-        if ($annotation !== null && $annotation instanceof Column) {
-            $columnName = $annotation->name;
-        }
-
-        return $columnName;
     }
 
     /**
@@ -85,7 +75,7 @@ abstract class StoredEntity extends Object
     {
         $reflect = new ReflectionClass($this);
         foreach ($reflect->getProperties() as $property) {
-            $annotation = $this->annotationReader->getPropertyAnnotation($property, 'App\Model\Annotation\Primary');
+            $annotation = $this->annotationReader->getPropertyAnnotation($property, Primary::class);
             if ($annotation !== null) {
                 return $property;
             }
@@ -101,7 +91,7 @@ abstract class StoredEntity extends Object
      */
     private function getInsertValues()
     {
-        $columns = $this->databaseLink->getStructure()->getColumns($this->getTableName());
+        $columns = $this->databaseLink->getStructure()->getColumns($this->getInstanceTableName());
 
         $entityDbData = [];
         foreach ($columns as $columnData) {
@@ -125,23 +115,58 @@ abstract class StoredEntity extends Object
         return $entityDbData;
     }
 
+
     /**
      * @internal
+     * @param ReflectionProperty $reflectionProperty
      * @return string
-     * @throws InvalidAnnotationException
      */
-    private function getTableName()
+    private function getColumnNameForProperty(ReflectionProperty $reflectionProperty)
     {
-        $reflect = new ReflectionClass($this);
-        $annotation = $this->annotationReader->getClassAnnotation($reflect, Table::class);
-        InvalidAnnotationException::assert($annotation, Table::class);
-        return $annotation->name;
+        $columnName = $reflectionProperty->getName();
+        $annotation = $this->annotationReader->getPropertyAnnotation($reflectionProperty, Column::class);
+        if ($annotation !== null && $annotation instanceof Column) {
+            $columnName = $annotation->name;
+        }
+
+        return $columnName;
+    }
+
+
+    /**
+     * @internal
+     * @param ReflectionProperty $reflectionProperty
+     * @return string|null
+     */
+    private function getFormControlNameForProperty(ReflectionProperty $reflectionProperty)
+    {
+        $annotation = $this->annotationReader->getPropertyAnnotation($reflectionProperty, FormControl::class);
+        if ($annotation !== null && $annotation instanceof FormControl) {
+            return $annotation->controlName;
+        }
+
+        return null;
+    }
+
+    /**
+     * @internal
+     * @param ReflectionProperty $reflectionProperty
+     * @return string|null
+     */
+    private function getReferenceClassForProperty(ReflectionProperty $reflectionProperty)
+    {
+        $annotation = $this->annotationReader->getPropertyAnnotation($reflectionProperty, Reference::class);
+        if ($annotation !== null && $annotation instanceof Reference) {
+            return $annotation->className;
+        }
+
+        return null;
     }
 
     /**
      * @internal
      * @param string $searchColumnName
-     * @return null|ReflectionProperty
+     * @return ReflectionProperty|null
      */
     private function getPropertyByColumnName($searchColumnName)
     {
@@ -150,6 +175,25 @@ abstract class StoredEntity extends Object
         foreach ($reflectObject->getProperties() as $property) {
             $columnName = $this->getColumnNameForProperty($property);
             if ($columnName == $searchColumnName) {
+                return $property;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @internal
+     * @param string $searchFormControlName
+     * @return ReflectionProperty|null
+     */
+    private function getPropertyByFormControlName($searchFormControlName)
+    {
+        $reflectObject = new ReflectionObject($this);
+
+        foreach ($reflectObject->getProperties() as $property) {
+            $formControlName = $this->getFormControlNameForProperty($property);
+            if ($formControlName !== null && $formControlName == $searchFormControlName) {
                 return $property;
             }
         }
@@ -179,17 +223,14 @@ abstract class StoredEntity extends Object
         $object = $this->getPropertyValue($reflectionProperty);
 
         if ($this->row == null) {
-            $annotation = $this->annotationReader->getPropertyAnnotation($reflectionProperty, OnCreate::class);
-            if ($annotation != null && $annotation instanceof OnCreate) {
-                return $this->callAnnotationMethod($annotation->methodName);
-            }
+            $relatedAnnotationClass = OnCreate::class;
+        } else {
+            $relatedAnnotationClass = OnUpdate::class;
         }
 
-        if ($this->row !== null) {
-            $annotation = $this->annotationReader->getPropertyAnnotation($reflectionProperty, OnUpdate::class);
-            if ($annotation != null && $annotation instanceof OnUpdate) {
-                return $this->callAnnotationMethod($annotation->methodName);
-            }
+        $annotation = $this->annotationReader->getPropertyAnnotation($reflectionProperty, $relatedAnnotationClass);
+        if ($annotation != null && $annotation instanceof MethodCall) {
+            return $annotation->call($this);
         }
 
         return $object;
@@ -205,66 +246,92 @@ abstract class StoredEntity extends Object
             return [];
         }
 
-        $reflectObject = new ReflectionObject($this);
 
         $changedValues = [];
 
-        foreach ($reflectObject->getProperties() as $property) {
-            $columnName = $this->getColumnNameForProperty($property);
 
-            if (isset($this->row->$columnName)) {
-                $property->setAccessible(true);
-                if ($this->row->$columnName != $property->getValue($this)) {
-                    $changedValues[$columnName] = $property->getValue($this);
+        foreach ($this->row as $columnName => $value) {
+            $property = $this->getPropertyByColumnName($columnName);
+            if ($property) {
+                $propertyValue = $this->getPropertySaveValue($property);
+                if ($propertyValue != $value) {
+                    $changedValues[$columnName] = $propertyValue;
                 }
             }
+
         }
 
         return $changedValues;
     }
 
+    /************** annotation methods **************/
+
     /**
      * @internal
-     * @param string $methodName
-     * @return mixed
+     * @param Reader $annotationReader
+     * @return string
+     * @throws InvalidAnnotationException
      */
-    private function callAnnotationMethod($methodName)
+    static function getTableName(Reader $annotationReader)
     {
-        if (strpos($methodName, "::") !== false) {
-            $reflectMethod = new ReflectionMethod($methodName);
-            return $reflectMethod->invoke(null);
-        } else {
-            $reflect = new ReflectionClass($this);
-            $reflectMethod = $reflect->getMethod($methodName);
-            return $reflectMethod->invoke($this);
-        }
+        $reflect = new ReflectionClass(get_called_class());
+        $annotation = $annotationReader->getClassAnnotation($reflect, Table::class);
+        InvalidAnnotationException::assert($annotation, Table::class);
+        return $annotation->name;
+    }
+
+    /**
+     * @internal
+     * @return string
+     * @throws InvalidAnnotationException
+     */
+    private function getInstanceTableName()
+    {
+        return static::getTableName($this->annotationReader);
+    }
+
+    /************** interface IStorageDependencyProvider **************/
+
+    /** @inheritDoc */
+    function provideAnnotationReader()
+    {
+        return $this->annotationReader;
+    }
+
+    /** @inheritDoc */
+    function provideDatabaseLink()
+    {
+        return $this->databaseLink;
     }
 
     /************** public methods **************/
 
     /**
-     * Inject dependencies into entity
-     * @param CachedReader $annotationReader
-     * @param IDatabaseLink $databaseLink
+     * Returns primary value of entity.
+     * @return mixed|null
      */
-    public function injectDependencies(CachedReader $annotationReader, IDatabaseLink $databaseLink)
+    public function getPrimary()
     {
-        $this->annotationReader = $annotationReader;
-        $this->databaseLink = $databaseLink;
-    }
+        $primaryProperty = $this->getPrimaryColumn();
+        if ($primaryProperty === null) {
+            return null;
+        }
 
-
-    /**
-     * Sets ActiveRow record for the entity
-     * @param ActiveRow $row
-     */
-    public function setRecord(ActiveRow $row)
-    {
-        $this->loadFromRecord($row);
+        $primaryProperty->setAccessible(true);
+        return $primaryProperty->getValue($this);
     }
 
     /**
-     * Returns whether entity is new or loaded
+     * Returns selection for entity table.
+     * @return Selection
+     */
+    public function getTable()
+    {
+        return $this->databaseLink->getTable($this->getInstanceTableName());
+    }
+
+    /**
+     * Returns whether entity is new or loaded.
      * @return bool
      */
     public function isNewEntity()
@@ -273,14 +340,14 @@ abstract class StoredEntity extends Object
     }
 
     /**
-     * Saves entity into database
+     * Saves entity into database.
+     * @return void
      */
     public function save()
     {
         if ($this->isNewEntity()) {
             $insertValues = $this->getInsertValues();
-            $table = $this->databaseLink->getTable($this->getTableName());
-            $row = $table->insert($insertValues);
+            $row = $this->getTable()->insert($insertValues);
             $this->loadFromRecord($row);
         } else {
             $changedValues = $this->getChangedValues();
@@ -288,4 +355,161 @@ abstract class StoredEntity extends Object
         }
     }
 
+    /**
+     * Deletes current record if saved.
+     * @return void
+     */
+    public function delete()
+    {
+        if ($this->isNewEntity()) {
+            return;
+        } else {
+            $this->row->delete();
+        }
+    }
+
+    /**
+     * Returns referencing rows.
+     * @param string $collectionClass
+     * @param string|null $throughColumn
+     * @return StoredCollection|ArrayAccess
+     */
+    public function related($collectionClass, $throughColumn = null)
+    {
+        if ($this->isNewEntity()) {
+            return null;
+        } else {
+            $entityClass = $collectionClass::getEntityClassName($this->annotationReader);
+            $key = $entityClass::getTableName($this->annotationReader);
+            return $collectionClass::create($this, $this->row->related($key, $throughColumn));
+        }
+    }
+
+    /**
+     * @param string $entityClass
+     * @param string $key
+     * @param null $column
+     * @return StoredEntity|null
+     * @throws NoReferenceException
+     */
+    public function reference($entityClass, $key = null, $column = null)
+    {
+        if ($this->cachedReferences == null) {
+            $this->cachedReferences = new ArrayHash();
+        }
+
+        if ($this->isNewEntity()) {
+            return null;
+        }
+
+        if ($key == null) {
+            $columnToDiscoverReference = $entityClass;
+            $reflectProperty = $this->getPropertyByColumnName($columnToDiscoverReference);
+            if ($reflectProperty) {
+                $entityClass = $this->getReferenceClassForProperty($reflectProperty);
+                if (!$entityClass) {
+                    throw new NoReferenceException($columnToDiscoverReference);
+                }
+
+                $column = $columnToDiscoverReference;
+                $key = $entityClass::getTableName($this->annotationReader);
+            }
+        }
+
+        if (!$this->cachedReferences->offsetExists($key)) {
+            $reference = $entityClass::create($this, $this->row->getTable()->getReferencedTable($this->row, $key, $column));
+            $this->cachedReferences->offsetSet($key, $reference);
+        }
+
+        return $this->cachedReferences->offsetGet($key);
+    }
+
+    /**
+     * Sets form default values according to entity.
+     * @param Form $form
+     */
+    public function setDefaultFormValues(Form $form)
+    {
+        foreach ($form->getControls() as $name => $control) {
+            $property = $this->getPropertyByFormControlName($name);
+            if ($property === null) {
+                continue;
+            }
+
+            $property->setAccessible(true);
+            $targetValue = $property->getValue($this);
+            if ($control instanceof ChoiceControl) {
+                if (!isset($control->getItems()[$targetValue])) {
+                    $targetValue = null;
+                }
+            }
+
+            $control->setDefaultValue($targetValue);
+        }
+    }
+
+    /**
+     * Sets entity values by filled form values.
+     * @param Form $form
+     */
+    public function setFilledValues(Form $form)
+    {
+        foreach ($form->getControls() as $name => $control) {
+            $property = $this->getPropertyByFormControlName($name);
+            if ($property === null) {
+                continue;
+            }
+
+            $property->setAccessible(true);
+            $property->setValue($this, $control->getValue());
+        }
+    }
+
+    /**
+     * Returns exported values in array.
+     * @return ArrayHash
+     */
+    public function toArray()
+    {
+        $reflect = new ReflectionObject($this);
+
+        $data = new ArrayHash();
+        foreach ($reflect->getProperties() as $property) {
+            $annotations = $this->annotationReader->getPropertyAnnotations($property);
+            $shouldBeExported = false;
+            foreach ($annotations as $annotation) {
+                if ($annotation instanceof Column ||
+                    $annotation instanceof Exported
+                ) {
+                    $shouldBeExported = true;
+                    break;
+                }
+            }
+
+            if ($shouldBeExported) {
+                $property->setAccessible(true);
+                $data[$property->getName()] = $property->getValue($this);
+            }
+        }
+
+        return $data;
+    }
+
+    /************** static methods **************/
+
+    /**
+     * @param IDependencyProvider $provider
+     * @param ActiveRow|boolean|null $row
+     * @return static
+     */
+    public static function create(IDependencyProvider $provider, $row = null)
+    {
+        /** @var $entity StoredEntity */
+        $entity = parent::newInstance($provider);
+        if ($row !== false && $row !== null && $row instanceof ActiveRow) {
+            $entity->setRecord($row);
+        }
+
+        return $entity;
+    }
 }

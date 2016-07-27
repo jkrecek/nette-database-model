@@ -2,6 +2,7 @@
 namespace Krecek\Database;
 
 use Nette\Database\IStructure;
+use Nette\Database\ResultSet;
 use Nette\Database\Table\Selection;
 
 interface IDatabaseLink
@@ -19,5 +20,13 @@ interface IDatabaseLink
      * @return IStructure
      */
     function getStructure();
+
+    /**
+     * Generates and executes SQL query.
+     * @param  string
+     * @param  mixed [parameters, ...]
+     * @return ResultSet
+     */
+    function query($sql);
 
 }
