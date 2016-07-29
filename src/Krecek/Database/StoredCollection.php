@@ -6,6 +6,7 @@ use Doctrine\Common\Annotations\Reader;
 use Iterator;
 use Krecek\Database\Annotation\Entity;
 use Krecek\Database\Exception\InvalidAnnotationException;
+use Krecek\Database\Exception\InvalidPropertyException;
 use Nette\Database\Table\Selection;
 use ReflectionClass;
 
@@ -51,9 +52,14 @@ abstract class StoredCollection extends StoredObject implements Iterator, Counta
      * @return string
      * @throws InvalidAnnotationException
      */
-    private function getInstanceEntityClassName()
+    public function getInstanceEntityClassName()
     {
         return static::getEntityClassName($this->annotationReader);
+    }
+
+    public function getTableName() {
+        $entityName = $this->getInstanceEntityClassName();
+        return $entityName::getTableName($this->annotationReader);
     }
 
     /************** interface Iterator **************/
@@ -114,6 +120,18 @@ abstract class StoredCollection extends StoredObject implements Iterator, Counta
     }
 
     /**
+     * Add order clause for property.
+     * @param Sorter $sorter
+     * @return StoredCollection
+     * @throws InvalidPropertyException
+     * @internal param $property
+     * @internal param bool $asc
+     */
+    public function sort(Sorter $sorter) {
+        return $this->order("{$sorter->getColumnNameForCollection($this)} {$sorter->getOrderType()}");
+    }
+
+    /**
      * Counts number of rows
      * @param string|null $column
      * @return int
@@ -123,6 +141,12 @@ abstract class StoredCollection extends StoredObject implements Iterator, Counta
         return $this->selection->count($column);
     }
 
+    /**
+     * Fetches all rows as associative array.
+     * @param string|null $key
+     * @param string|null $value
+     * @return array
+     */
     public function fetchPairs($key = null, $value = null)
     {
         return $this->selection->fetchPairs($key, $value);
@@ -136,6 +160,13 @@ abstract class StoredCollection extends StoredObject implements Iterator, Counta
     {
         $this->selection->where($condition);
         return $this;
+    }
+
+    /**
+     * Deletes current collection.
+     */
+    public function delete() {
+        $this->selection->delete();
     }
 
     /************** static methods **************/

@@ -5,6 +5,7 @@ use ArrayAccess;
 use Doctrine\Common\Annotations\Reader;
 use Exception;
 use Krecek\Database\Annotation\Column;
+use Krecek\Database\Annotation\DefaultValue;
 use Krecek\Database\Annotation\Exported;
 use Krecek\Database\Annotation\FormControl;
 use Krecek\Database\Annotation\MethodCall;
@@ -97,19 +98,21 @@ abstract class StoredEntity extends StoredObject
         foreach ($columns as $columnData) {
             $columnName = $columnData['name'];
             $columnProperty = $this->getPropertyByColumnName($columnName);
-            $columnValue = $this->getPropertyValue($columnProperty);
-            if ($columnValue === null) {
-                if ($columnData['autoincrement'] == true) {
-                    continue;
+            if ($columnProperty) {
+                $columnValue = $this->getPropertySaveValue($columnProperty);
+                if ($columnValue === null) {
+                    if ($columnData['autoincrement'] == true) {
+                        continue;
+                    }
+
+                    if ($columnData['nullable'] == false) {
+                        throw new IncompleteEntityException($columnProperty->getName());
+                    }
                 }
 
-                if ($columnData['nullable'] == false) {
-                    throw new IncompleteEntityException($columnProperty->getName());
-                }
+
+                $entityDbData[$columnName] = $columnValue;
             }
-
-
-            $entityDbData[$columnName] = $this->getPropertySaveValue($columnProperty);
         }
 
         return $entityDbData;
@@ -123,15 +126,8 @@ abstract class StoredEntity extends StoredObject
      */
     private function getColumnNameForProperty(ReflectionProperty $reflectionProperty)
     {
-        $columnName = $reflectionProperty->getName();
-        $annotation = $this->annotationReader->getPropertyAnnotation($reflectionProperty, Column::class);
-        if ($annotation !== null && $annotation instanceof Column) {
-            $columnName = $annotation->name;
-        }
-
-        return $columnName;
+        return self::getClassColumnNameForProperty($this->annotationReader, $reflectionProperty);
     }
-
 
     /**
      * @internal
@@ -165,15 +161,34 @@ abstract class StoredEntity extends StoredObject
 
     /**
      * @internal
+     * @param ReflectionProperty $reflectionProperty
+     * @return string|null
+     */
+    private function getDefaultValueForProperty(ReflectionProperty $reflectionProperty)
+    {
+        $annotation = $this->annotationReader->getPropertyAnnotation($reflectionProperty, DefaultValue::class);
+        if ($annotation !== null && $annotation instanceof DefaultValue) {
+            return $annotation->value;
+        }
+
+        return null;
+    }
+
+    /**
+     * @internal
      * @param string $searchColumnName
      * @return ReflectionProperty|null
      */
     private function getPropertyByColumnName($searchColumnName)
     {
-        $reflectObject = new ReflectionObject($this);
+        return self::getClassPropertyByColumnName($this->annotationReader, $searchColumnName);
+    }
+
+    public static function getClassPropertyByColumnName(Reader $annotationReader, $searchColumnName) {
+        $reflectObject = new ReflectionClass(get_called_class());
 
         foreach ($reflectObject->getProperties() as $property) {
-            $columnName = $this->getColumnNameForProperty($property);
+            $columnName = self::getClassColumnNameForProperty($annotationReader, $property);
             if ($columnName == $searchColumnName) {
                 return $property;
             }
@@ -444,6 +459,13 @@ abstract class StoredEntity extends StoredObject
                 }
             }
 
+            if ($targetValue == NULL && $this->isNewEntity()) {
+                $propertyDefault = $this->getDefaultValueForProperty($property);
+                if ($propertyDefault) {
+                    $targetValue = $propertyDefault;
+                }
+            }
+
             $control->setDefaultValue($targetValue);
         }
     }
@@ -511,5 +533,20 @@ abstract class StoredEntity extends StoredObject
         }
 
         return $entity;
+    }
+
+    /**
+     * @param Reader $annotationReader
+     * @param ReflectionProperty $reflectionProperty
+     * @return string
+     */
+    public static function getClassColumnNameForProperty(Reader $annotationReader, ReflectionProperty $reflectionProperty) {
+        $columnName = $reflectionProperty->getName();
+        $annotation = $annotationReader->getPropertyAnnotation($reflectionProperty, Column::class);
+        if ($annotation !== null && $annotation instanceof Column) {
+            $columnName = $annotation->name;
+        }
+
+        return $columnName;
     }
 }
