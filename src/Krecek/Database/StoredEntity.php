@@ -184,7 +184,8 @@ abstract class StoredEntity extends StoredObject
         return self::getClassPropertyByColumnName($this->annotationReader, $searchColumnName);
     }
 
-    public static function getClassPropertyByColumnName(Reader $annotationReader, $searchColumnName) {
+    public static function getClassPropertyByColumnName(Reader $annotationReader, $searchColumnName)
+    {
         $reflectObject = new ReflectionClass(get_called_class());
 
         foreach ($reflectObject->getProperties() as $property) {
@@ -459,7 +460,7 @@ abstract class StoredEntity extends StoredObject
                 }
             }
 
-            if ($targetValue == NULL && $this->isNewEntity()) {
+            if ($targetValue == null && $this->isNewEntity()) {
                 $propertyDefault = $this->getDefaultValueForProperty($property);
                 if ($propertyDefault) {
                     $targetValue = $propertyDefault;
@@ -540,7 +541,8 @@ abstract class StoredEntity extends StoredObject
      * @param ReflectionProperty $reflectionProperty
      * @return string
      */
-    public static function getClassColumnNameForProperty(Reader $annotationReader, ReflectionProperty $reflectionProperty) {
+    public static function getClassColumnNameForProperty(Reader $annotationReader, ReflectionProperty $reflectionProperty)
+    {
         $columnName = $reflectionProperty->getName();
         $annotation = $annotationReader->getPropertyAnnotation($reflectionProperty, Column::class);
         if ($annotation !== null && $annotation instanceof Column) {

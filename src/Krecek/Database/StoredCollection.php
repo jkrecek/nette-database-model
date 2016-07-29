@@ -57,7 +57,8 @@ abstract class StoredCollection extends StoredObject implements Iterator, Counta
         return static::getEntityClassName($this->annotationReader);
     }
 
-    public function getTableName() {
+    public function getTableName()
+    {
         $entityName = $this->getInstanceEntityClassName();
         return $entityName::getTableName($this->annotationReader);
     }
@@ -127,7 +128,8 @@ abstract class StoredCollection extends StoredObject implements Iterator, Counta
      * @internal param $property
      * @internal param bool $asc
      */
-    public function sort(Sorter $sorter) {
+    public function sort(Sorter $sorter)
+    {
         return $this->order("{$sorter->getColumnNameForCollection($this)} {$sorter->getOrderType()}");
     }
 
@@ -165,7 +167,8 @@ abstract class StoredCollection extends StoredObject implements Iterator, Counta
     /**
      * Deletes current collection.
      */
-    public function delete() {
+    public function delete()
+    {
         $this->selection->delete();
     }
 

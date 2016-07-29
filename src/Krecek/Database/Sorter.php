@@ -3,7 +3,6 @@ namespace Krecek\Database;
 
 
 use Doctrine\Common\Annotations\Reader;
-use Krecek\Database\Exception\InvalidPropertyException;
 use Nette\Object;
 use ReflectionException;
 use ReflectionProperty;
@@ -32,7 +31,8 @@ class Sorter extends Object
      * @param $entityClass
      * @return string
      */
-    private function getColumnName(Reader $annotationReader, $entityClass) {
+    private function getColumnName(Reader $annotationReader, $entityClass)
+    {
         try {
             $reflectionProperty = new ReflectionProperty($entityClass, $this->propertyName);
             return $entityClass::getClassColumnNameForProperty($annotationReader, $reflectionProperty);
@@ -45,7 +45,8 @@ class Sorter extends Object
      * @param StoredCollection $collection
      * @return string
      */
-    public function getColumnNameForCollection(StoredCollection $collection) {
+    public function getColumnNameForCollection(StoredCollection $collection)
+    {
         return $this->getColumnName($collection->provideAnnotationReader(), $collection->getInstanceEntityClassName());
     }
 
@@ -53,14 +54,16 @@ class Sorter extends Object
      * @param StoredEntity $entity
      * @return string
      */
-    public function getColumnNameForEntity(StoredEntity $entity) {
+    public function getColumnNameForEntity(StoredEntity $entity)
+    {
         return $this->getColumnName($entity->provideAnnotationReader(), get_class($entity));
     }
 
     /**
      * @return string
      */
-    public function getOrderType() {
+    public function getOrderType()
+    {
         return $this->asc ? "ASC" : "DESC";
     }
 
