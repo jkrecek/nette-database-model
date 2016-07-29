@@ -1,6 +1,7 @@
 <?php
 namespace Krecek\Database\Exception;
 
+
 /**
  * Class IncompleteEntityException
  * @package Krecek\Database

@@ -2,12 +2,19 @@
 namespace Krecek\Database\Exception;
 
 
-use Exception;
-
-class NoReferenceException extends Exception
+/**
+ * Class NoReferenceException
+ * @package Krecek\Database\Exception
+ */
+class NoReferenceException extends EntityException
 {
+    /** @var string */
     private $column;
 
+    /**
+     * NoReferenceException constructor.
+     * @param string $column
+     */
     public function __construct($column)
     {
         $this->column = $column;

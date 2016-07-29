@@ -288,7 +288,7 @@ abstract class StoredEntity extends StoredObject
      * @return string
      * @throws InvalidAnnotationException
      */
-    static function getTableName(Reader $annotationReader)
+    public static function getTableName(Reader $annotationReader)
     {
         $reflect = new ReflectionClass(get_called_class());
         $annotation = $annotationReader->getClassAnnotation($reflect, Table::class);
@@ -392,6 +392,8 @@ abstract class StoredEntity extends StoredObject
      */
     public function related($collectionClass, $throughColumn = null)
     {
+        self::mustBeChildOf($collectionClass, StoredCollection::class);
+
         if ($this->isNewEntity()) {
             return null;
         } else {
@@ -431,6 +433,8 @@ abstract class StoredEntity extends StoredObject
                 $key = $entityClass::getTableName($this->annotationReader);
             }
         }
+
+        self::mustBeChildOf($entityClass, StoredEntity::class);
 
         if (!$this->cachedReferences->offsetExists($key)) {
             $reference = $entityClass::create($this, $this->row->getTable()->getReferencedTable($this->row, $key, $column));

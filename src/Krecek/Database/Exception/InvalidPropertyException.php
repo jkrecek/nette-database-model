@@ -2,7 +2,11 @@
 namespace Krecek\Database\Exception;
 
 
-class InvalidPropertyException extends \Exception
+/**
+ * Class InvalidPropertyException
+ * @package Krecek\Database\Exception
+ */
+class InvalidPropertyException extends EntityException
 {
 
 }

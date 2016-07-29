@@ -1,15 +1,10 @@
 <?php
-/**
- * Created by PhpStorm.
- * User: honzakrecek
- * Date: 22/07/16
- * Time: 11:54
- */
-
 namespace Krecek\Database;
 
 
 use Doctrine\Common\Annotations\Reader;
+use Krecek\Database\Exception\InvalidClassException;
+use ReflectionClass;
 
 abstract class StoredObject implements IDependencyProvider
 {
@@ -59,6 +54,20 @@ abstract class StoredObject implements IDependencyProvider
 
     /************** static methods **************/
 
+
+    /**
+     * Returns whether $class is child of $parentClass
+     * @param $class
+     * @param $parentClass
+     * @return bool
+     */
+    private static function isChildOf($class, $parentClass)
+    {
+        $classRef = new ReflectionClass($class);
+        return $classRef->isSubclassOf($parentClass);
+    }
+
+
     /**
      * @internal
      * @param IDependencyProvider $provider
@@ -68,5 +77,20 @@ abstract class StoredObject implements IDependencyProvider
     {
         return new static($provider);
     }
+
+    /**
+     * Checks whether $class is child of $parentClass and throws exception otherwise.
+     * @param $class
+     * @param $parentClass
+     * @throws InvalidClassException
+     */
+    protected static function mustBeChildOf($class, $parentClass)
+    {
+        $isChild = self::isChildOf($class, $parentClass);
+        if (!$isChild) {
+            throw new InvalidClassException(get_called_class(), $class, $parentClass);
+        }
+    }
+
 
 }

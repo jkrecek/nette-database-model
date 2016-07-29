@@ -1,13 +1,12 @@
 <?php
 namespace Krecek\Database\Exception;
 
-use Exception;
 
 /**
  * Class InvalidAnnotationException
  * @package Krecek\Database
  */
-class InvalidAnnotationException extends Exception
+class InvalidAnnotationException extends EntityException
 {
     /**
      * @param object|null $annotation
