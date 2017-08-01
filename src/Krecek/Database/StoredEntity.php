@@ -270,7 +270,7 @@ abstract class StoredEntity extends StoredObject
             $property = $this->getPropertyByColumnName($columnName);
             if ($property) {
                 $propertyValue = $this->getPropertySaveValue($property);
-                if ($propertyValue != $value) {
+                if ($propertyValue !== $value) {
                     $changedValues[$columnName] = $propertyValue;
                 }
             }
